@@ -1,6 +1,7 @@
 ﻿using UnityEngine;
 using LocalNetworking;
 using UnityEngine.UI;
+using System;
 
 public class NetworkManager : MonoBehaviour
 {
@@ -16,18 +17,24 @@ public class NetworkManager : MonoBehaviour
 
     void Start()
     {
+        _server.OnConnect += OnConnect;
         _server.OnData += OnData;
+    }
+
+    private void OnConnect(string IP)
+    {
+        print(IP + " connected");
     }
 
     private void OnDestroy()
     {
+        _server.OnConnect -= OnConnect;
         _server.OnData -= OnData;
     }
 
     private void OnData(string msg, string payload)
     {
-        string[] positions = payload.Split(',');
-        Vector3 pos = new Vector3(int.Parse(positions[0]), int.Parse(positions[1]), int.Parse(positions[2]));
+        Vector3 pos = _server.ReadVector3(payload);
         _dot.GetComponent<Fader>()._alpha = 1f;
         _dot.transform.position = pos;
     }
@@ -38,11 +45,7 @@ public class NetworkManager : MonoBehaviour
         {
            if (Input.GetMouseButtonDown(0))
             {
-                string pos = "";
-                pos += Mathf.Round(Input.mousePosition.x).ToString() + ",";
-                pos += Mathf.Round(Input.mousePosition.y).ToString() + ",";
-                pos += Mathf.Round(Input.mousePosition.z).ToString();
-                _server.Send(new Message("DOT", pos));
+                _server.SendVector3("DOT", Input.mousePosition);
             }
         }
     }

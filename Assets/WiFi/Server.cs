@@ -24,6 +24,10 @@ namespace LocalNetworking
     {
         #region member variables
 
+        public int _port = 8008;
+        public bool _debug;
+
+        public Action<string> OnConnect;
         public Action<string, string> OnData;
 
         private bool _host;
@@ -33,6 +37,20 @@ namespace LocalNetworking
         private IPEndPoint _endPoint;
 
         #endregion
+
+        #region monobehavior
+
+        void OnDestroy()
+        {
+            if (_serverThread != null)
+                _serverThread.Abort();
+            if (_client != null)
+                _client.Close();
+        }
+
+        #endregion
+
+        #region networking core
 
         public void StartNetworking(bool hosting)
         {
@@ -47,12 +65,16 @@ namespace LocalNetworking
 
             _thisIP = Dns.GetHostEntry(Dns.GetHostName()).AddressList.FirstOrDefault(ip => ip.AddressFamily == AddressFamily.InterNetwork).ToString();
 
-            _endPoint = new IPEndPoint(IPAddress.Broadcast, 8008);
-            _client = new UdpClient(8008);
+            _endPoint = new IPEndPoint(IPAddress.Broadcast, _port);
+            _client = new UdpClient(_port);
+            _client.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ExclusiveAddressUse, false);
+            _client.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
 
             _serverThread = new Thread(new ThreadStart(Listen));
             _serverThread.IsBackground = true;
             _serverThread.Start();
+
+            Send(new Message("CONN", _thisIP));
         }
 
         private void Listen()
@@ -66,6 +88,8 @@ namespace LocalNetworking
                     //decode message
                     string msg = Encoding.UTF8.GetString(bytes);
 
+                    if (_debug) print(msg);
+
                     string cmd = msg.Split('|')[0];
                     string payload = msg.Split('|')[1];
                     string ip = msg.Split('|')[2];
@@ -73,13 +97,28 @@ namespace LocalNetworking
                     //broadcast the message back to all clients
                     if (_host && ip != _thisIP) Send(new Message(cmd, payload));
 
-                    UnityMainThreadDispatcher.Instance().Enqueue(DataReceived(cmd, payload));
+                    //check for new connections
+                    if (cmd == "CONN")
+                    {
+                        if (_debug) print("Connection from: " + payload);
+                        UnityMainThreadDispatcher.Instance().Enqueue(Connection(payload));
+                    }
+                    else
+                    {
+                        UnityMainThreadDispatcher.Instance().Enqueue(DataReceived(cmd, payload));
+                    }
                 }
                 catch (Exception err)
                 {
-                    print(err.ToString());
+                    if (_debug) print(err.ToString());
                 }
             }
+        }
+
+        private IEnumerator Connection(string IP)
+        {
+            OnConnect?.Invoke(IP);
+            yield return new WaitForEndOfFrame();
         }
 
         private IEnumerator DataReceived(string cmd, string payload)
@@ -114,12 +153,82 @@ namespace LocalNetworking
             return _host;
         }
 
-        void OnDestroy()
+        #endregion
+
+        #region utility methods
+
+        public void SendBool(string opCode, bool val)
         {
-            if (_serverThread != null)
-                _serverThread.Abort();
-            if (_client != null)
-                _client.Close();
+            string toSend = val ? "1" : "0";
+
+            Send(new Message(opCode, toSend));
         }
+
+        public bool ReadBool(string message)
+        {
+            bool toRead = message == "1" ? true : false;
+            return toRead;
+        }
+
+        public void SendNumber(string opCode, float val)
+        {
+            string toSend = val.ToString();
+
+            Send(new Message(opCode, toSend));
+        }
+
+        public float ReadNumber(string message)
+        {
+            float toRead = float.Parse(message);
+            return toRead;
+        }
+
+        public void SendVector2(string opCode, Vector2 vector)
+        {
+            string toSend = "";
+            toSend += Mathf.Round(vector.x).ToString() + ",";
+            toSend += Mathf.Round(vector.y).ToString();
+
+            Send(new Message(opCode, toSend));
+        }
+
+        public Vector3 ReadVector2(string message)
+        {
+            string[] positions = message.Split(',');
+            Vector2 toRead = new Vector2(int.Parse(positions[0]), int.Parse(positions[1]));
+            return toRead;
+        }
+
+        public void SendVector3(string opCode, Vector3 vector)
+        {
+            string toSend = "";
+            toSend += Mathf.Round(vector.x).ToString() + ",";
+            toSend += Mathf.Round(vector.y).ToString() + ",";
+            toSend += Mathf.Round(vector.z).ToString();
+
+            Send(new Message(opCode, toSend));
+        }
+
+        public Vector3 ReadVector3(string message)
+        {
+            string[] positions = message.Split(',');
+            Vector3 toRead = new Vector3(int.Parse(positions[0]), int.Parse(positions[1]), int.Parse(positions[2]));
+            return toRead;
+        }
+
+        public void SendJSON<T>(string opCode, T json)
+        {
+            string toSend = JsonUtility.ToJson(json);
+
+            Send(new Message(opCode, toSend));
+        }
+
+        public T ReadJSON<T>(string message)
+        {
+            T toRead = JsonUtility.FromJson<T>(message);
+            return toRead;
+        }
+
+        #endregion
     }
 }
