@@ -4,6 +4,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Threading;
 using UnityEngine;
+using System.Linq;
 
 namespace LocalNetworking
 {
@@ -25,6 +26,7 @@ namespace LocalNetworking
         public Action<string, string> OnData;
 
         private bool _host;
+        private string _thisIP;
         private Thread _serverThread;
         private UdpClient _client;
         private IPEndPoint _endPoint;
@@ -41,6 +43,8 @@ namespace LocalNetworking
             {
                 _host = false;
             }
+
+            _thisIP = Dns.GetHostEntry(Dns.GetHostName()).AddressList.FirstOrDefault(ip => ip.AddressFamily == AddressFamily.InterNetwork).ToString();
 
             _endPoint = new IPEndPoint(IPAddress.Broadcast, 8008);
             _client = new UdpClient(8008);
@@ -62,9 +66,10 @@ namespace LocalNetworking
                     string msg = Encoding.UTF8.GetString(bytes);
                     string cmd = msg.Split('|')[0];
                     string payload = msg.Split('|')[1];
+                    string ip = msg.Split('|')[2];
 
                     //broadcast the message back to all clients
-                    if (_host) Send(new Message(cmd, payload));
+                    if (_host && ip != _thisIP) Send(new Message(cmd, payload));
 
                     OnData?.Invoke(cmd, payload);
                 }
@@ -87,7 +92,7 @@ namespace LocalNetworking
                 if (message.Length == 0 || !message.Contains("|"))
                     return;
 
-                byte[] data = Encoding.UTF8.GetBytes(message);
+                byte[] data = Encoding.UTF8.GetBytes(message + "|" + _thisIP);
                 _client.Send(data, data.Length, _endPoint);
             }
             catch (Exception err)
