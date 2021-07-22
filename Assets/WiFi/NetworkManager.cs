@@ -1,5 +1,6 @@
 ﻿using UnityEngine;
 using LocalNetworking;
+using UnityEngine.UI;
 
 public class NetworkManager : MonoBehaviour
 {
@@ -7,6 +8,7 @@ public class NetworkManager : MonoBehaviour
 
     public Server _server;
     public GameObject _UI;
+    public Image _dot;
 
     private bool _started = false;
 
@@ -24,7 +26,10 @@ public class NetworkManager : MonoBehaviour
 
     private void OnData(string msg, string payload)
     {
-        Debug.LogError(msg + " - " + payload);
+        string[] positions = payload.Split(',');
+        Vector3 pos = new Vector3(int.Parse(positions[0]), int.Parse(positions[1]), int.Parse(positions[2]));
+        _dot.GetComponent<Fader>()._alpha = 1f;
+        _dot.transform.position = pos;
     }
 
     void Update()
@@ -32,7 +37,13 @@ public class NetworkManager : MonoBehaviour
         if (_started)
         {
            if (Input.GetMouseButtonDown(0))
-                _server.Send(new Message("PING", "Hello!"));
+            {
+                string pos = "";
+                pos += Mathf.Round(Input.mousePosition.x).ToString() + ",";
+                pos += Mathf.Round(Input.mousePosition.y).ToString() + ",";
+                pos += Mathf.Round(Input.mousePosition.z).ToString();
+                _server.Send(new Message("DOT", pos));
+            }
         }
     }
 

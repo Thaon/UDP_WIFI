@@ -5,6 +5,7 @@ using System.Net.Sockets;
 using System.Threading;
 using UnityEngine;
 using System.Linq;
+using System.Collections;
 
 namespace LocalNetworking
 {
@@ -64,6 +65,7 @@ namespace LocalNetworking
 
                     //decode message
                     string msg = Encoding.UTF8.GetString(bytes);
+
                     string cmd = msg.Split('|')[0];
                     string payload = msg.Split('|')[1];
                     string ip = msg.Split('|')[2];
@@ -71,13 +73,19 @@ namespace LocalNetworking
                     //broadcast the message back to all clients
                     if (_host && ip != _thisIP) Send(new Message(cmd, payload));
 
-                    OnData?.Invoke(cmd, payload);
+                    UnityMainThreadDispatcher.Instance().Enqueue(DataReceived(cmd, payload));
                 }
                 catch (Exception err)
                 {
                     print(err.ToString());
                 }
             }
+        }
+
+        private IEnumerator DataReceived(string cmd, string payload)
+        {
+            OnData?.Invoke(cmd, payload);
+            yield return new WaitForEndOfFrame();
         }
 
         public void Send(Message msg)
