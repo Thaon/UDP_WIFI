@@ -20,6 +20,7 @@ namespace LocalNetworking
         }
     }
 
+    [RequireComponent(typeof(UnityMainThreadDispatcher))]
     public class Server : MonoBehaviour
     {
         #region member variables
