@@ -6,6 +6,7 @@ using System.Threading;
 using UnityEngine;
 using System.Linq;
 using System.Collections;
+using System.Collections.Generic;
 
 namespace LocalNetworking
 {
@@ -26,7 +27,7 @@ namespace LocalNetworking
         #region member variables
 
         public int _port = 8008;
-        public bool _debug;
+        public bool _debug = false;
 
         public Action<string> OnConnect;
         public Action<string, string> OnData;
@@ -36,6 +37,9 @@ namespace LocalNetworking
         private Thread _serverThread;
         private UdpClient _client;
         private IPEndPoint _endPoint;
+        private bool _started = false;
+
+        private Queue<Message> _messagesToBroadcast = new Queue<Message>();
 
         #endregion
 
@@ -66,16 +70,22 @@ namespace LocalNetworking
 
             _thisIP = Dns.GetHostEntry(Dns.GetHostName()).AddressList.FirstOrDefault(ip => ip.AddressFamily == AddressFamily.InterNetwork).ToString();
 
-            _endPoint = new IPEndPoint(IPAddress.Broadcast, _port);
+            _endPoint = new IPEndPoint(_host ? IPAddress.Any : IPAddress.Broadcast, _port);
             _client = new UdpClient();
             _client.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ExclusiveAddressUse, false);
             _client.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
+            
+            if(_host) _client.Client.Bind(_endPoint);
+
 
             _serverThread = new Thread(new ThreadStart(Listen));
             _serverThread.IsBackground = true;
             _serverThread.Start();
 
             Send(new Message("CONN", _thisIP));
+
+            _started = true;
+            if (_debug) Debug.Log("Started Networking");
         }
 
         private void Listen()
@@ -89,31 +99,41 @@ namespace LocalNetworking
                     //decode message
                     string msg = Encoding.UTF8.GetString(bytes);
 
-                    if (_debug) print(msg);
+                    if (_debug) Debug.Log(msg);
 
                     string cmd = msg.Split('|')[0];
                     string payload = msg.Split('|')[1];
                     string ip = msg.Split('|')[2];
 
+                    Message incoming = new Message(cmd, payload);
+
                     //broadcast the message back to all clients
-                    if (_host && ip != _thisIP) Send(new Message(cmd, payload));
+                    if (_host && ip != _thisIP) _messagesToBroadcast.Enqueue(incoming);
 
                     //check for new connections
                     if (cmd == "CONN")
                     {
-                        if (_debug) print("Connection from: " + payload);
+                        if (_debug) Debug.Log("Connection from: " + payload);
                         UnityMainThreadDispatcher.Instance().Enqueue(Connection(payload));
                     }
                     else
                     {
-                        UnityMainThreadDispatcher.Instance().Enqueue(DataReceived(cmd, payload));
+                        _messagesToBroadcast.Enqueue(incoming);
                     }
                 }
                 catch (Exception err)
                 {
-                    if (_debug) print(err.ToString());
+                    if (_debug) Debug.Log(err.ToString());
+                }
+
+                while (_messagesToBroadcast.Count > 0)
+                {
+                    if (_debug) Debug.Log("Messages to broadcast: " + _messagesToBroadcast.Count);
+                    Message msg = _messagesToBroadcast.Dequeue();
+                    UnityMainThreadDispatcher.Instance().Enqueue(DataReceived(msg._opCode, msg._msg));
                 }
             }
+
         }
 
         private IEnumerator Connection(string IP)
@@ -145,13 +165,18 @@ namespace LocalNetworking
             }
             catch (Exception err)
             {
-                print(err.ToString());
+                Debug.Log(err.ToString());
             }
         }
 
         public bool IsHost()
         {
             return _host;
+        }
+
+        public bool IsStarted()
+        {
+            return _started;
         }
 
         #endregion

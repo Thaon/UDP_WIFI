@@ -315,7 +315,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   _port: 8008
-  _debug: 0
+  _debug: 1
 --- !u!114 &1181080305
 MonoBehaviour:
   m_ObjectHideFlags: 0

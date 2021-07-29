@@ -15,11 +15,15 @@ public class MyNetworkManager : NetworkManager
         Shutdown();
     }
 
+    private void Update()
+    {
+        if (Input.GetMouseButtonDown(0) && _server.IsStarted()) _server.SendBool("Pong", true);
+    }
+
     public override void OnConnect(string IP)
     {
         base.OnConnect(IP);
-
-        Debug.Log(IP + " connected");
+        _server.SendBool("Ping", true);
     }
 
     public override void OnData(string msg, string payload)
