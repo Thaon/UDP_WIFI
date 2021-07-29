@@ -24,7 +24,7 @@ public class MyNetworkManager : NetworkManager
     {
         base.OnConnect(IP);
         
-        Debug.Log("Connected to Server!");
+        Debug.Log("Client: "+ IP +" Connected to the Server!");
         _server.SendBool("Ping", true);
     }
 

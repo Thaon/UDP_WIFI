@@ -33,7 +33,7 @@ namespace LocalNetworking
         }
 
         /// <summary>
-        /// Called when a connection with the server is established
+        /// Called when a client connects to the server
         /// </summary>
         /// <param name="IP">The IP address that the Server is on</param>
         public virtual void OnConnect(string IP)
