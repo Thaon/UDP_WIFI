@@ -23,11 +23,24 @@ public class MyNetworkManager : NetworkManager
     public override void OnConnect(string IP)
     {
         base.OnConnect(IP);
+        
+        Debug.Log("Connected to Server!");
         _server.SendBool("Ping", true);
     }
 
-    public override void OnData(string msg, string payload)
+    public override void OnData(string opCode, string payload)
     {
-        base.OnData(msg, payload);
+        base.OnData(opCode, payload);
+
+        switch(opCode)
+        {
+            case "Ping":
+                Debug.Log("Ping received");
+                break;
+
+            case "Pong":
+                Debug.Log("Pong received");
+                break;
+        }
     }
 }

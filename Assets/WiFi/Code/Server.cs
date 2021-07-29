@@ -75,14 +75,14 @@ namespace LocalNetworking
             _client.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ExclusiveAddressUse, false);
             _client.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
             
-            if(_host) _client.Client.Bind(_endPoint);
 
+            if(_host) _client.Client.Bind(_endPoint);
 
             _serverThread = new Thread(new ThreadStart(Listen));
             _serverThread.IsBackground = true;
             _serverThread.Start();
 
-            Send(new Message("CONN", _thisIP));
+            if (!_host) Send(new Message("CONN", _thisIP));
 
             _started = true;
             if (_debug) Debug.Log("Started Networking");
