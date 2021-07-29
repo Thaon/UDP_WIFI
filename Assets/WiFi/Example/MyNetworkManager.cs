@@ -18,6 +18,8 @@ public class MyNetworkManager : NetworkManager
     public override void OnConnect(string IP)
     {
         base.OnConnect(IP);
+
+        Debug.Log(IP + " connected");
     }
 
     public override void OnData(string msg, string payload)

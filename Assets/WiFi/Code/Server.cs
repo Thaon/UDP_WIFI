@@ -67,7 +67,7 @@ namespace LocalNetworking
             _thisIP = Dns.GetHostEntry(Dns.GetHostName()).AddressList.FirstOrDefault(ip => ip.AddressFamily == AddressFamily.InterNetwork).ToString();
 
             _endPoint = new IPEndPoint(IPAddress.Broadcast, _port);
-            _client = new UdpClient(_port);
+            _client = new UdpClient();
             _client.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ExclusiveAddressUse, false);
             _client.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
 

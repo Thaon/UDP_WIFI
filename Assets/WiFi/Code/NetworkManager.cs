@@ -15,6 +15,7 @@ namespace LocalNetworking
 
         public virtual void Init()
         {
+            _server = GetComponent<Server>();
             _server.OnConnect += OnConnect;
             _server.OnData += OnData;
         }
