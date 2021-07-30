@@ -17,7 +17,7 @@ public class MyNetworkManager : NetworkManager
 
     private void Update()
     {
-        if (Input.GetMouseButtonDown(0) && _server.IsStarted()) _server.SendBool("Pong", true);
+        if (Input.GetMouseButtonDown(0) && _server.IsStarted()) Spawn(_prefabs[0], transform.position, Quaternion.identity);
     }
 
     public override void OnConnect(string IP)

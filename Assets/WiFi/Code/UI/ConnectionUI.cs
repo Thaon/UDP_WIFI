@@ -1,20 +1,23 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Events;
 
 public class ConnectionUI : MonoBehaviour
 {
+    public UnityEvent OnHost, OnJoin;
+
     private void OnGUI()
     {
         if (GUI.Button(new Rect(10, 10, 50, 30), "HOST"))
         {
-            FindObjectOfType<LocalNetworking.NetworkManager>().Host();
+            OnHost?.Invoke();
             Destroy(this);
         }
 
         if (GUI.Button(new Rect(70, 10, 50, 30), "JOIN"))
         {
-            FindObjectOfType<LocalNetworking.NetworkManager>().Join();
+            OnJoin?.Invoke();
             Destroy(this);
         }
     }
