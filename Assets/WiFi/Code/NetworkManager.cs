@@ -1,5 +1,7 @@
 ﻿using UnityEngine;
 using System.Collections.Generic;
+using System.Net.Sockets;
+using System;
 
 namespace LocalNetworking
 {
@@ -19,52 +21,22 @@ namespace LocalNetworking
         /// <summary>
         /// Starts the server and binds the event listeners
         /// </summary>
-        public virtual void Init()
+        public void Init()
         {
             _server = GetComponent<Server>();
-            _server.OnConnect += OnConnect;
+            _server.OnConnection += OnConnect;
             _server.OnData += OnData;
+            _server.OnServerShutdown += OnServerShutdown;
         }
 
         /// <summary>
         /// Unbinds the event listeners
         /// </summary>
-        public virtual void Shutdown()
+        public void Shutdown()
         {
-            _server.OnConnect -= OnConnect;
+            _server.OnConnection -= OnConnect;
             _server.OnData -= OnData;
-        }
-
-        /// <summary>
-        /// Called when a client connects to the server
-        /// </summary>
-        /// <param name="IP">The IP address that the Server is on</param>
-        public virtual void OnConnect(string IP)
-        {
-        }
-
-        /// <summary>
-        /// Called whenever a packet of data is received from the server
-        /// </summary>
-        /// <param name="opCode">A string that represent the operation to perform</param>
-        /// <param name="payload">The data associated with the operation, can be null</param>
-        public virtual void OnData(string opCode, string payload = null)
-        {
-            if (opCode == "#SPAWN#")
-            {
-                //if (_server.IsHost()) return;
-
-                int objectID = int.Parse(payload.Split('~')[0]);
-                Vector3 pos = _server.ReadVector3(payload.Split('~')[1]);
-                Quaternion rot = Quaternion.Euler(_server.ReadVector3(payload.Split('~')[2]));
-
-                //instantiate and configure on clients
-                GameObject spawned = Instantiate(_prefabs[objectID], pos, rot);
-                NetBehaviour snb = spawned.GetComponent<NetBehaviour>();
-                snb.ID = _spawnedObjectsTotal;
-                snb.hasAuthority = true;
-                _spawnedObjectsTotal++;
-            }
+            _server.OnServerShutdown -= OnServerShutdown;
         }
 
         /// <summary>
@@ -75,7 +47,7 @@ namespace LocalNetworking
             if (!_started)
             {
                 _started = true;
-                _server.StartNetworking(true);
+                _server.Host();
             }
         }
 
@@ -87,42 +59,36 @@ namespace LocalNetworking
             if (!_started)
             {
                 _started = true;
-                _server.StartNetworking(false);
+                _server.Join();
             }
         }
 
-        public NetBehaviour Spawn(GameObject go, Vector3 position, Quaternion rotation)
+        #region events
+
+        /// <summary>
+        /// Called when a client connects to the server
+        /// </summary>
+        /// <param name="connection"></param>
+        public virtual void OnConnect(Socket connection)
         {
-            NetBehaviour nb = go.GetComponentInChildren<NetBehaviour>();
-            if (nb == null)
-            {
-                Debug.LogWarning("You need a NetBehaviour to spawn this object!");
-                return null;
-            }
-
-            //instantiate locally
-            GameObject spawned = Instantiate(go, position, rotation);
-            //configure locally
-            NetBehaviour snb = spawned.GetComponent<NetBehaviour>();
-            snb.ID = _spawnedObjectsTotal;
-            snb.hasAuthority = true;
-            _spawnedObjectsTotal++;
-
-            //instantiate on the network
-            int obj = _prefabs.FindIndex(o => o == go);
-
-            string pos = "";
-            pos += Mathf.Round(position.x).ToString() + ",";
-            pos += Mathf.Round(position.y).ToString() + ",";
-            pos += Mathf.Round(position.z).ToString();
-
-            string rot = "";
-            rot += Mathf.Round(rotation.eulerAngles.x).ToString() + ",";
-            rot += Mathf.Round(rotation.eulerAngles.y).ToString() + ",";
-            rot += Mathf.Round(rotation.eulerAngles.z).ToString();
-
-            _server.Send(new Message("#SPAWN#", obj.ToString() + "~" + pos + "~" + rot));
-            return nb;
         }
+
+        /// <summary>
+        /// Called whenever a packet of data is received from the server
+        /// </summary>
+        /// <param name="message"></param>
+        public virtual void OnData(Server.Message message)
+        {
+        }
+
+        /// <summary>
+        /// Called when the server closes the connection with the clients
+        /// </summary>
+        public virtual void OnServerShutdown()
+        {
+            Shutdown();
+        }
+
+        #endregion
     }
 }

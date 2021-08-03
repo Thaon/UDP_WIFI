@@ -2,6 +2,8 @@
 using System.Collections.Generic;
 using UnityEngine;
 using LocalNetworking;
+using System.Net.Sockets;
+using System.Net;
 
 public class MyNetworkManager : NetworkManager
 {
@@ -17,30 +19,40 @@ public class MyNetworkManager : NetworkManager
 
     private void Update()
     {
-        if (Input.GetMouseButtonDown(0) && _server.IsStarted()) Spawn(_prefabs[0], transform.position, Quaternion.identity);
-    }
-
-    public override void OnConnect(string IP)
-    {
-        base.OnConnect(IP);
-        
-        Debug.Log("Client: "+ IP +" Connected to the Server!");
-        _server.SendBool("Ping", true);
-    }
-
-    public override void OnData(string opCode, string payload)
-    {
-        base.OnData(opCode, payload);
-
-        switch(opCode)
+        if (_started && Input.GetKeyDown(KeyCode.Space))
         {
-            case "Ping":
-                Debug.Log("Ping received");
-                break;
+            print("sending");
+            _server.Send("msg", "Message!");
+        }
+    }
 
-            case "Pong":
-                Debug.Log("Pong received");
+    public override void OnConnect(Socket connection)
+    {
+        base.OnConnect(connection);
+
+        IPEndPoint endPoint = (IPEndPoint)connection.RemoteEndPoint;
+        
+        Debug.LogError("Client: "+ endPoint.Address.ToString() +" Connected to the Server!");
+    }
+
+    public override void OnData(Server.Message message)
+    {
+        base.OnData(message);
+
+        Debug.LogError(message._msg);
+
+        switch (message._opCode)
+        {
+            case "msg":
+                Debug.Log(message._msg);
                 break;
         }
+    }
+
+    public override void OnServerShutdown()
+    {
+        base.OnServerShutdown();
+
+        Debug.LogError("Server shut down");
     }
 }

@@ -10,243 +10,256 @@ using System.Collections.Generic;
 
 namespace LocalNetworking
 {
-    public class Message
-    {
-        public string _opCode, _msg;
-
-        public Message(string opCode, string msg)
-        {
-            _opCode = opCode;
-            _msg = msg;
-        }
-    }
-
-    [RequireComponent(typeof(UnityMainThreadDispatcher))]
     public class Server : MonoBehaviour
     {
-        #region member variables
+        private const int BUFFER_SIZE = 100 * 1024;
 
+        #region nested classes
+
+        [System.Serializable]
+        public class Message
+        {
+            public string _opCode, _msg;
+
+            public Message(string opCode, string msg)
+            {
+                _opCode = opCode;
+                _msg = msg;
+            }
+        }
+
+        #endregion
+
+        [HideInInspector]
+        public bool host;
         public int _port = 8008;
         public bool _debug = false;
+        public Socket _socket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
 
-        public Action<string> OnConnect;
-        public Action<string, string> OnData;
+        /// <summary>
+        /// Events handling
+        /// </summary>
+        public Action<Socket> OnConnection;
+        public Action<Message> OnData;
+        public Action OnServerShutdown;
 
-        private bool _host;
-        private string _thisIP;
-        private Thread _serverThread;
-        private UdpClient _client;
-        private IPEndPoint _endPoint;
-        private bool _started = false;
+        /// <summary>
+        /// Networking handlers
+        /// </summary>
+        private Thread _clientThread;
+        private List<Socket> _clients = new List<Socket>();
+        private byte[] _buffer = new byte[BUFFER_SIZE];
 
-        private Queue<Message> _messagesToBroadcast = new Queue<Message>();
 
-        #endregion
-
-        #region monobehavior
-
-        void OnDestroy()
+        private void OnDisable()
         {
-            if (_serverThread != null)
-                _serverThread.Abort();
-            if (_client != null)
-                _client.Close();
+            if (host) CloseAllSockets(); else CloseClientConnection();
         }
 
-        #endregion
-
-        #region networking core
-
-        public void StartNetworking(bool hosting)
+        public void Host()
         {
-            if (hosting)
-            {
-                _host = true;
-            }
-            else
-            {
-                _host = false;
-            }
-
-            _thisIP = Dns.GetHostEntry(Dns.GetHostName()).AddressList.FirstOrDefault(ip => ip.AddressFamily == AddressFamily.InterNetwork).ToString();
-
-            _endPoint = new IPEndPoint(_host ? IPAddress.Any : IPAddress.Broadcast, _port);
-            _client = new UdpClient();
-            _client.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ExclusiveAddressUse, false);
-            _client.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
-            
-
-            if(_host) _client.Client.Bind(_endPoint);
-
-            _serverThread = new Thread(new ThreadStart(Listen));
-            _serverThread.IsBackground = true;
-            _serverThread.Start();
-
-            if (!_host) Send(new Message("CONN", _thisIP));
-
-            _started = true;
-            if (_debug) Debug.Log("Started Networking");
+            if (_debug) Debug.LogError("Started Host");
+            host = true;
+            _socket.Bind(new IPEndPoint(IPAddress.Any, _port));
+            _socket.Listen(100);
+            _socket.BeginAccept(Listen, null);
         }
 
-        private void Listen()
+        public void Join()
         {
-            while (true)
+            if (_debug) Debug.LogError("Started Client");
+            host = false;
+            int attempts = 0;
+
+            while (!_socket.Connected || attempts < 100)
             {
                 try
                 {
-                    byte[] bytes = _client.Receive(ref _endPoint);
-
-                    //decode message
-                    string msg = Encoding.UTF8.GetString(bytes);
-
-                    if (_debug) Debug.Log(msg);
-
-                    string cmd = msg.Split('|')[0];
-                    string payload = msg.Split('|')[1];
-                    string ip = msg.Split('|')[2];
-
-                    Message incoming = new Message(cmd, payload);
-
-                    //broadcast the message back to all clients
-                    if (_host && ip != _thisIP) _messagesToBroadcast.Enqueue(incoming);
-
-                    //check for new connections
-                    if (cmd == "CONN")
-                    {
-                        if (_debug) Debug.Log("Connection from: " + payload);
-                        UnityMainThreadDispatcher.Instance().Enqueue(Connection(payload));
-                    }
-                    else
-                    {
-                        _messagesToBroadcast.Enqueue(incoming);
-                    }
+                    attempts++;
+                    Debug.Log("Connection attempt " + attempts);
+                    _socket.Connect(IPAddress.Loopback, _port);
                 }
-                catch (Exception err)
+                catch (SocketException)
                 {
-                    if (_debug) Debug.Log(err.ToString());
-                }
-
-                while (_messagesToBroadcast.Count > 0)
-                {
-                    if (_debug) Debug.Log("Messages to broadcast: " + _messagesToBroadcast.Count);
-                    Message msg = _messagesToBroadcast.Dequeue();
-                    UnityMainThreadDispatcher.Instance().Enqueue(DataReceived(msg._opCode, msg._msg));
+                    Console.Clear();
                 }
             }
 
+            _clientThread = new Thread(new ThreadStart(ClientListen));
+            _clientThread.IsBackground = true;
+            _clientThread.Start();
         }
 
-        private IEnumerator Connection(string IP)
+        private void ClientListen()
         {
-            OnConnect?.Invoke(IP);
+            while (true)
+            {
+                //unpacke the stream of data
+                var buffer = new byte[BUFFER_SIZE];
+                int received = _socket.Receive(buffer, SocketFlags.None);
+                if (received == 0) return;
+                var data = new byte[received];
+                Array.Copy(buffer, data, received);
+
+                //decode message and invoke events
+                string messageJson = Encoding.ASCII.GetString(data);
+                Message msg = JsonUtility.FromJson<Message>(UnpackJson(messageJson));
+                UnityMainThreadDispatcher.Instance().Enqueue(OnDataCO(msg));
+            }
+        }
+
+        private IEnumerator OnDataCO(Message msg)
+        {
+            OnData?.Invoke(msg);
             yield return new WaitForEndOfFrame();
         }
 
-        private IEnumerator DataReceived(string cmd, string payload)
+        private void CloseClientConnection()
         {
-            OnData?.Invoke(cmd, payload);
-            yield return new WaitForEndOfFrame();
+            Send("CLIENT_EXIT", ""); // Tell the server we are exiting
+            _socket.Shutdown(SocketShutdown.Both);
+            _socket.Close();
         }
 
-        public void Send(Message msg)
+        public void Send(string opCode, string text)
         {
-            if (msg._opCode.Length == 0)
-                return;
+            Message msg = new Message(opCode, text);
 
-            string message = msg._opCode + "|" + msg._msg;
+            string toSend = PackJson(JsonUtility.ToJson(msg).ToString());
+            if (_debug) Debug.LogError("Sending Message: " + toSend);
+
+            byte[] bytes = Encoding.ASCII.GetBytes(toSend);
+            if (host)
+            {
+                _clients.ForEach(socket =>
+                {
+                    socket.Send(bytes);
+                });
+            }
+            else
+            {
+                _socket.Send(bytes);
+            }
+        }
+
+        private void Listen(IAsyncResult AR)
+        {
+            Socket socket;
 
             try
             {
-                if (message.Length == 0 || !message.Contains("|"))
-                    return;
-
-                byte[] data = Encoding.UTF8.GetBytes(message + "|" + _thisIP);
-                _client.Send(data, data.Length, _endPoint);
+                socket = _socket.EndAccept(AR);
             }
-            catch (Exception err)
+            catch (ObjectDisposedException)
             {
-                Debug.Log(err.ToString());
+                return;
             }
+
+            _clients.Add(socket);
+            OnConnection?.Invoke(socket);
+            socket.BeginReceive(_buffer, 0, BUFFER_SIZE, SocketFlags.None, ReceiveData, socket);
+            _socket.BeginAccept(Listen, null);
+
         }
 
-        public bool IsHost()
+        private void ReceiveData(IAsyncResult AR)
         {
-            return _host;
+            Socket current = (Socket)AR.AsyncState;
+            int received;
+
+            try
+            {
+                received = current.EndReceive(AR);
+            }
+            catch (SocketException)
+            {
+                Debug.LogWarning("Client forcefully disconnected");
+                // Don't shutdown because the socket may be disposed and its disconnected anyway.
+                current.Close();
+                _clients.Remove(current);
+                return;
+            }
+
+            byte[] recBuf = new byte[received];
+            Array.Copy(_buffer, recBuf, received);
+            string messageJson = Encoding.ASCII.GetString(recBuf);
+
+            Message msg = JsonUtility.FromJson<Message>(UnpackJson(messageJson));
+
+            if (_debug) Debug.LogError(msg._opCode + " - " + msg._msg);
+
+            //invoke events
+            OnData?.Invoke(msg);
+
+            //check for special messages
+            switch (msg._opCode)
+            {
+                case "CLIENT_EXIT":
+                    // Always Shutdown before closing
+                    current.Shutdown(SocketShutdown.Both);
+                    current.Close();
+                    _clients.Remove(current);
+                    if (_debug) Debug.Log("Client disconnected");
+                    break;
+
+                case "SRV_SHUTDOWN":
+                    OnServerShutdown?.Invoke();
+                    CloseAllSockets();
+                    return;
+            }
+
+            //broadcast message back
+            if (host) _clients.ForEach(socket =>
+            {
+                socket.Send(recBuf);
+            });
+
+            current.BeginReceive(_buffer, 0, BUFFER_SIZE, SocketFlags.None, ReceiveData, current);
         }
 
-        public bool IsStarted()
+        private void CloseAllSockets()
         {
-            return _started;
+            //notify clients of the imminent server shutdown
+            Message msg = new Message("SRV_SHUTDOWN", "");
+
+            string toSend = PackJson(JsonUtility.ToJson(msg).ToString());
+            byte[] bytes = Encoding.ASCII.GetBytes(toSend);
+
+            _clients.ForEach(socket =>
+            {
+                socket.Send(bytes);
+            });
+
+            foreach (Socket socket in _clients)
+            {
+                socket.Shutdown(SocketShutdown.Both);
+                socket.Close();
+            }
+
+            _socket.Close();
         }
 
-        #endregion
+        #region utility
 
-        #region utility methods
-
-        public void SendBool(string opCode, bool val)
+        public string PackJson(string json)
         {
-            string toSend = val ? "1" : "0";
-
-            Send(new Message(opCode, toSend));
+            string newJson = json.Trim('"');
+            newJson = json.Replace('"', '\'');
+            return newJson;
         }
 
-        public bool ReadBool(string message)
+        public string UnpackJson(string data)
         {
-            bool toRead = message == "1" ? true : false;
-            return toRead;
-        }
-
-        public void SendNumber(string opCode, float val)
-        {
-            string toSend = val.ToString();
-
-            Send(new Message(opCode, toSend));
-        }
-
-        public float ReadNumber(string message)
-        {
-            float toRead = float.Parse(message);
-            return toRead;
-        }
-
-        public void SendVector2(string opCode, Vector2 vector)
-        {
-            string toSend = "";
-            toSend += Mathf.Round(vector.x).ToString() + ",";
-            toSend += Mathf.Round(vector.y).ToString();
-
-            Send(new Message(opCode, toSend));
-        }
-
-        public Vector3 ReadVector2(string message)
-        {
-            string[] positions = message.Split(',');
-            Vector2 toRead = new Vector2(int.Parse(positions[0]), int.Parse(positions[1]));
-            return toRead;
-        }
-
-        public void SendVector3(string opCode, Vector3 vector)
-        {
-            string toSend = "";
-            toSend += Mathf.Round(vector.x).ToString() + ",";
-            toSend += Mathf.Round(vector.y).ToString() + ",";
-            toSend += Mathf.Round(vector.z).ToString();
-
-            Send(new Message(opCode, toSend));
-        }
-
-        public Vector3 ReadVector3(string message)
-        {
-            string[] positions = message.Split(',');
-            Vector3 toRead = new Vector3(int.Parse(positions[0]), int.Parse(positions[1]), int.Parse(positions[2]));
-            return toRead;
+            string newJson = data.Trim('"');
+            newJson = newJson.Replace('\'', '"');
+            return newJson;
         }
 
         public void SendJSON<T>(string opCode, T json)
         {
             string toSend = JsonUtility.ToJson(json);
 
-            Send(new Message(opCode, toSend));
+            Send(opCode, toSend);
         }
 
         public T ReadJSON<T>(string message)
