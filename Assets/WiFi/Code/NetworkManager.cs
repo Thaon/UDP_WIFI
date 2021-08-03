@@ -1,7 +1,6 @@
-﻿using UnityEngine;
+﻿using System.Net.Sockets;
 using System.Collections.Generic;
-using System.Net.Sockets;
-using System;
+using UnityEngine;
 
 namespace LocalNetworking
 {
