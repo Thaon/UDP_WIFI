@@ -1,6 +1,7 @@
 ﻿using System.Net.Sockets;
 using System.Collections.Generic;
 using UnityEngine;
+using System;
 
 namespace LocalNetworking
 {
@@ -25,6 +26,7 @@ namespace LocalNetworking
             _server = GetComponent<Server>();
             _server.OnConnection += OnConnect;
             _server.OnData += OnData;
+            _server.OnClientDisconnect += OnClientDisconnect;
             _server.OnServerShutdown += OnServerShutdown;
         }
 
@@ -35,6 +37,7 @@ namespace LocalNetworking
         {
             _server.OnConnection -= OnConnect;
             _server.OnData -= OnData;
+            _server.OnClientDisconnect -= OnClientDisconnect;
             _server.OnServerShutdown -= OnServerShutdown;
         }
 
@@ -77,6 +80,13 @@ namespace LocalNetworking
         /// </summary>
         /// <param name="message"></param>
         public virtual void OnData(Server.Message message)
+        {
+        }
+
+        /// <summary>
+        /// called whenever a client is disconnected
+        /// </summary>
+        public virtual void OnClientDisconnect(Socket connection)
         {
         }
 

@@ -37,14 +37,21 @@ public class MyNetworkManager : NetworkManager
     {
         base.OnData(message);
 
-        Debug.LogError(message._msg);
-
         switch (message._opCode)
         {
             case "msg":
                 Debug.Log(message._msg);
                 break;
         }
+    }
+
+    public override void OnClientDisconnect(Socket connection)
+    {
+        base.OnClientDisconnect(connection);
+
+        IPEndPoint ipEndpoint = (IPEndPoint)connection.RemoteEndPoint;
+
+        Debug.LogError("Client disconnected from: " + ipEndpoint.Address.ToString());
     }
 
     public override void OnServerShutdown()

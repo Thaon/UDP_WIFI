@@ -11,11 +11,6 @@ namespace LocalNetworking
 {
     public class Server : MonoBehaviour
     {
-        /// <summary>
-        /// The size of the buffer used to send and receive data
-        /// </summary>
-        private const int BUFFER_SIZE = 100 * 1024;
-
         #region nested classes
 
         [System.Serializable]
@@ -31,6 +26,14 @@ namespace LocalNetworking
         }
 
         #endregion
+
+
+        #region member variables
+        
+        /// <summary>
+        /// The size of the buffer used to send and receive data
+        /// </summary>
+        private const int BUFFER_SIZE = 100 * 1024;
 
         /// <summary>
         /// should we debug the communications?
@@ -56,6 +59,7 @@ namespace LocalNetworking
         /// </summary>
         public Action<Socket> OnConnection;
         public Action<Message> OnData;
+        public Action<Socket> OnClientDisconnect;
         public Action OnServerShutdown;
 
         /// <summary>
@@ -71,6 +75,16 @@ namespace LocalNetworking
         /// </summary>
         private byte[] _buffer = new byte[BUFFER_SIZE];
 
+        #endregion
+
+
+        /// <summary>
+        /// clean up on disable
+        /// </summary>
+        private void OnDisable()
+        {
+            if (host) CloseAllSockets(); else CloseClientConnection();
+        }
 
         /// <summary>
         /// We initiate a server session
@@ -167,6 +181,11 @@ namespace LocalNetworking
             yield return new WaitForEndOfFrame();
         }
 
+        /// <summary>
+        /// simpler version of the Send method used to pack Messages across
+        /// </summary>
+        /// <param name="opCode"></param>
+        /// <param name="text"></param>
         public void Send(string opCode, string text)
         {
             Message msg = new Message(opCode, text);
@@ -231,6 +250,7 @@ namespace LocalNetworking
                     current.Shutdown(SocketShutdown.Both);
                     current.Close();
                     _clients.Remove(current);
+                    OnClientDisconnect?.Invoke(current);
                     if (_debug) Debug.Log("Client disconnected");
                     break;
 
@@ -284,11 +304,6 @@ namespace LocalNetworking
 
             //close the socket
             _socket.Close();
-        }
-
-        private void OnDisable()
-        {
-            if (host) CloseAllSockets(); else CloseClientConnection();
         }
 
         #region utility
