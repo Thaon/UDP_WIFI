@@ -117,7 +117,7 @@ namespace LocalNetworking
                 }
                 catch (SocketException)
                 {
-                    Console.Clear();
+                    Debug.LogError("An error occurred whilst trying to join a game.");
                 }
             }
 

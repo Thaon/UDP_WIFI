@@ -10,11 +10,8 @@ namespace LocalNetworking
     {
         #region member variables
 
-        public List<GameObject> _prefabs;
-
         protected Server _server;
         protected bool _started = false;
-        protected uint _spawnedObjectsTotal;
 
         #endregion
 
